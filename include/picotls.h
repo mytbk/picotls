@@ -362,6 +362,10 @@ typedef struct st_ptls_on_client_hello_parameters_t {
         const uint16_t *list;
         size_t count;
     } signature_algorithms;
+    struct {
+        const uint16_t *list;
+        size_t count;
+    } certificate_compression_algorithms;
 } ptls_on_client_hello_parameters_t;
 
 /**
@@ -413,6 +417,28 @@ PTLS_CALLBACK_TYPE(void, update_open_count, ssize_t delta);
  * The cipher-suite that is being associated to the connection can be obtained by calling the ptls_get_cipher function.
  */
 PTLS_CALLBACK_TYPE(int, update_traffic_key, ptls_t *tls, int is_enc, size_t epoch, const void *secret);
+/**
+ *
+ */
+typedef struct st_ptls_decompress_certificate_t {
+    /**
+     * list of supported algorithms terminated by UINT16_MAX
+     */
+    const uint16_t *supported_algorithms;
+    /**
+     * callback that decompresses the message
+     */
+    int (*cb)(struct st_ptls_decompress_certificate_t *self, ptls_t *tls, uint16_t algorithm, ptls_iovec_t output,
+              ptls_iovec_t input);
+} ptls_decompress_certificate_t;
+
+#define PTLS_CERTIFICATE_COMPRESSION_ALGORITHM_GZIP 1
+#define PTLS_CERTIFICATE_COMPRESSION_ALGORITHM_BROTLI 2
+
+typedef enum en_ptls_certificate_type_t {
+    PTLS_CERTIFICATE_TYPE_UNCOMPRESSED,
+    PTLS_CERTIFICATE_TYPE_PRECOMPRESSED
+} ptls_certificate_type_t;
 
 /**
  * the configuration
@@ -438,8 +464,18 @@ struct st_ptls_context_t {
      * list of certificates
      */
     struct {
-        ptls_iovec_t *list;
-        size_t count;
+        union {
+            struct {
+                ptls_iovec_t *list;
+                size_t count;
+            };
+            struct {
+                uint16_t algorithm;
+                uint32_t uncompressed_length;
+                ptls_iovec_t compressed_bytes;
+            } precompressed;
+        };
+        ptls_certificate_type_t type;
     } certificates;
     /**
      *
@@ -510,6 +546,10 @@ struct st_ptls_context_t {
      *
      */
     ptls_update_traffic_key_t *update_traffic_key;
+    /**
+     *
+     */
+    ptls_decompress_certificate_t *decompress_certificate;
 };
 
 typedef struct st_ptls_raw_extension_t {
@@ -652,6 +692,12 @@ int ptls_buffer_push_asn1_ubigint(ptls_buffer_t *buf, const void *bignum, size_t
         ptls_buffer_push(buf, (uint8_t)(_v >> 8), (uint8_t)_v);                                                                    \
     } while (0)
 
+#define ptls_buffer_push24(buf, v)                                                                                                 \
+    do {                                                                                                                           \
+        uint32_t _v = (v);                                                                                                         \
+        ptls_buffer_push(buf, (uint8_t)(_v >> 16), (uint8_t)(_v >> 8), (uint8_t)_v);                                               \
+    } while (0)
+
 #define ptls_buffer_push32(buf, v)                                                                                                 \
     do {                                                                                                                           \
         uint32_t _v = (v);                                                                                                         \
@@ -701,6 +747,7 @@ int ptls_buffer_push_asn1_ubigint(ptls_buffer_t *buf, const void *bignum, size_t
     } while (0)
 
 int ptls_decode16(uint16_t *value, const uint8_t **src, const uint8_t *end);
+int ptls_decode24(uint32_t *value, const uint8_t **src, const uint8_t *end);
 int ptls_decode32(uint32_t *value, const uint8_t **src, const uint8_t *end);
 int ptls_decode64(uint64_t *value, const uint8_t **src, const uint8_t *end);
 

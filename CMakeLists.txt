@@ -22,8 +22,20 @@ SET(MINICRYPTO_LIBRARY_FILES
     deps/cifra/src/poly1305.c
     deps/cifra/src/sha256.c
     deps/cifra/src/sha512.c)
+SET(CORE_FILES
+    lib/picotls.c
+    lib/pembase64.c)
 
-ADD_LIBRARY(picotls-core lib/picotls.c lib/pembase64.c)
+PKG_CHECK_MODULES(BROTLI REQUIRED libbrotlidec)
+IF (BROTLI_FOUND)
+    INCLUDE_DIRECTORIES(${BROTLI_INCLUDE_DIRS})
+    LINK_DIRECTORIES(${MROTLI_LIBRARY_DIRS})
+    SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DPICOTLS_USE_BROTLI=1")
+    LIST(APPEND CORE_FILES
+        lib/decompress_certificate.c)
+ENDIF ()
+
+ADD_LIBRARY(picotls-core ${CORE_FILES})
 ADD_LIBRARY(picotls-minicrypto ${MINICRYPTO_LIBRARY_FILES} lib/cifra.c lib/minicrypto-pem.c lib/uecc.c lib/asn1.c)
 ADD_EXECUTABLE(test-minicrypto.t ${MINICRYPTO_LIBRARY_FILES} deps/picotest/picotest.c t/picotls.c t/minicrypto.c lib/asn1.c lib/pembase64.c)
 
